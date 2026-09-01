@@ -3,7 +3,7 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
-
+import "leaflet/dist/leaflet.css";
 const display = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display",
