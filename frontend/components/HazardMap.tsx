@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   MapContainer,
   Marker,
   Popup,
   TileLayer,
+  useMap,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -15,10 +17,10 @@ interface HazardMapProps {
   detections: Detection[];
 }
 
-/*
- * Custom marker para hindi tayo umasa
- * sa default Leaflet marker image files.
- */
+/* =========================================================
+   CUSTOM HAZARD MARKER
+========================================================= */
+
 const hazardMarker = L.divIcon({
   className: "",
   html: `
@@ -38,92 +40,228 @@ const hazardMarker = L.divIcon({
   popupAnchor: [0, -12],
 });
 
+/* =========================================================
+   FORCE LEAFLET TO RECALCULATE CONTAINER SIZE
+
+   Fixes:
+   - small map in center
+   - blank area around map
+   - incorrect dimensions after responsive layout
+========================================================= */
+
+function MapResizeFix() {
+  const map = useMap();
+
+  useEffect(() => {
+    const fixSize = () => {
+      map.invalidateSize();
+    };
+
+    /* First correction after initial render */
+    const timer1 = window.setTimeout(fixSize, 100);
+    const timer2 = window.setTimeout(fixSize, 500);
+
+    window.addEventListener("resize", fixSize);
+
+    const container = map.getContainer();
+
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      window.clearTimeout(timer1);
+      window.clearTimeout(timer2);
+
+      window.removeEventListener(
+        "resize",
+        fixSize
+      );
+
+      resizeObserver.disconnect();
+    };
+  }, [map]);
+
+  return null;
+}
+
+/* =========================================================
+   AUTOMATICALLY FIT MAP TO GPS DETECTIONS
+========================================================= */
+
+function FitDetectionBounds({
+  detections,
+}: {
+  detections: Detection[];
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const located = detections.filter(
+      (d) =>
+        d.latitude != null &&
+        d.longitude != null
+    );
+
+    if (located.length === 0) {
+      return;
+    }
+
+    const points = located.map(
+      (d) =>
+        [
+          Number(d.latitude),
+          Number(d.longitude),
+        ] as [number, number]
+    );
+
+    if (points.length === 1) {
+      map.setView(points[0], 17);
+      return;
+    }
+
+    const bounds =
+      L.latLngBounds(points);
+
+    map.fitBounds(bounds, {
+      padding: [40, 40],
+      maxZoom: 17,
+    });
+  }, [detections, map]);
+
+  return null;
+}
+
+/* =========================================================
+   MAIN MAP
+========================================================= */
+
 export default function HazardMap({
   detections,
 }: HazardMapProps) {
-  const locatedDetections = detections.filter(
-    (d) =>
-      d.latitude != null &&
-      d.longitude != null
-  );
+  const locatedDetections =
+    detections.filter(
+      (d) =>
+        d.latitude != null &&
+        d.longitude != null
+    );
 
   /*
-   * Default center:
-   * Metro Manila.
-   *
-   * Kapag may actual GPS detection,
-   * doon automatic mag-center.
+   * Default map center.
+   * Only used when there are no GPS records.
    */
   const center: [number, number] =
     locatedDetections.length > 0
       ? [
-          Number(locatedDetections[0].latitude),
-          Number(locatedDetections[0].longitude),
+          Number(
+            locatedDetections[0].latitude
+          ),
+          Number(
+            locatedDetections[0].longitude
+          ),
         ]
       : [14.5995, 120.9842];
 
   return (
-    <MapContainer
-      center={center}
-      zoom={locatedDetections.length > 0 ? 16 : 12}
-      scrollWheelZoom
-      className="h-full w-full"
+    <div
+      className="relative w-full h-full"
       style={{
-        height: "100%",
-        width: "100%",
         minHeight: "400px",
       }}
     >
-      {/* FREE MAP — NO API KEY REQUIRED */}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapContainer
+        center={center}
+        zoom={
+          locatedDetections.length > 0
+            ? 16
+            : 12
+        }
+        scrollWheelZoom={true}
+        className="absolute inset-0"
+        style={{
+          width: "100%",
+          height: "100%",
+          minHeight: "400px",
+        }}
+      >
+        {/* FREE OPENSTREETMAP - NO API KEY */}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-      {locatedDetections.map((detection) => (
-        <Marker
-          key={detection.id}
-          position={[
-            Number(detection.latitude),
-            Number(detection.longitude),
-          ]}
-          icon={hazardMarker}
-        >
-          <Popup>
-            <div
-              style={{
-                minWidth: "180px",
-              }}
+        {/* Fix map dimensions */}
+        <MapResizeFix />
+
+        {/* Automatically zoom to hazard locations */}
+        <FitDetectionBounds
+          detections={locatedDetections}
+        />
+
+        {/* Hazard markers */}
+        {locatedDetections.map(
+          (detection) => (
+            <Marker
+              key={detection.id}
+              position={[
+                Number(
+                  detection.latitude
+                ),
+                Number(
+                  detection.longitude
+                ),
+              ]}
+              icon={hazardMarker}
             >
-              <strong>
-                {detection.hazard_type}
-              </strong>
+              <Popup>
+                <div
+                  style={{
+                    minWidth: "190px",
+                  }}
+                >
+                  <strong>
+                    {
+                      detection.hazard_type
+                    }
+                  </strong>
 
-              <br />
+                  <br />
 
-              Confidence:{" "}
-              {(detection.confidence * 100).toFixed(1)}%
+                  Confidence:{" "}
+                  {(
+                    detection.confidence *
+                    100
+                  ).toFixed(1)}
+                  %
 
-              <br />
+                  <br />
 
-              Latitude:{" "}
-              {Number(detection.latitude).toFixed(6)}
+                  Latitude:{" "}
+                  {Number(
+                    detection.latitude
+                  ).toFixed(6)}
 
-              <br />
+                  <br />
 
-              Longitude:{" "}
-              {Number(detection.longitude).toFixed(6)}
+                  Longitude:{" "}
+                  {Number(
+                    detection.longitude
+                  ).toFixed(6)}
 
-              <br />
+                  <br />
 
-              Detected:{" "}
-              {new Date(
-                detection.created_at
-              ).toLocaleString()}
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+                  Detected:{" "}
+                  {new Date(
+                    detection.created_at
+                  ).toLocaleString()}
+                </div>
+              </Popup>
+            </Marker>
+          )
+        )}
+      </MapContainer>
+    </div>
   );
 }
