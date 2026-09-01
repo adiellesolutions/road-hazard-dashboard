@@ -1,48 +1,125 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Popup,
+  TileLayer,
+} from "react-leaflet";
+
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+
 import { Detection } from "@/types/detection";
 
-// Default Leaflet marker icons don't load correctly with bundlers — fix manually.
-const hazardIcon = new L.DivIcon({
+interface HazardMapProps {
+  detections: Detection[];
+}
+
+/*
+ * Custom marker para hindi tayo umasa
+ * sa default Leaflet marker image files.
+ */
+const hazardMarker = L.divIcon({
   className: "",
-  html: `<div style="
-    width:14px;height:14px;border-radius:50%;
-    background:#3B82F6;border:2px solid #F1F4F9;
-    box-shadow:0 0 0 4px rgba(59,130,246,0.25);
-  "></div>`,
-  iconSize: [14, 14],
-  iconAnchor: [7, 7],
+  html: `
+    <div
+      style="
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #22d3ee;
+        border: 3px solid white;
+        box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.25);
+      "
+    ></div>
+  `,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+  popupAnchor: [0, -12],
 });
 
-export default function HazardMap({ detections }: { detections: Detection[] }) {
-  const located = detections.filter((d) => d.latitude != null && d.longitude != null);
+export default function HazardMap({
+  detections,
+}: HazardMapProps) {
+  const locatedDetections = detections.filter(
+    (d) =>
+      d.latitude != null &&
+      d.longitude != null
+  );
+
+  /*
+   * Default center:
+   * Metro Manila.
+   *
+   * Kapag may actual GPS detection,
+   * doon automatic mag-center.
+   */
   const center: [number, number] =
-    located.length > 0 ? [located[0].latitude!, located[0].longitude!] : [14.5995, 120.9842];
+    locatedDetections.length > 0
+      ? [
+          Number(locatedDetections[0].latitude),
+          Number(locatedDetections[0].longitude),
+        ]
+      : [14.5995, 120.9842];
 
   return (
     <MapContainer
       center={center}
-      zoom={14}
+      zoom={locatedDetections.length > 0 ? 16 : 12}
       scrollWheelZoom
-      style={{ height: "100%", width: "100%", borderRadius: "0.5rem" }}
+      className="h-full w-full"
+      style={{
+        height: "100%",
+        width: "100%",
+        minHeight: "400px",
+      }}
     >
+      {/* FREE MAP — NO API KEY REQUIRED */}
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {located.map((d) => (
-        <Marker key={d.id} position={[d.latitude!, d.longitude!]} icon={hazardIcon}>
+
+      {locatedDetections.map((detection) => (
+        <Marker
+          key={detection.id}
+          position={[
+            Number(detection.latitude),
+            Number(detection.longitude),
+          ]}
+          icon={hazardMarker}
+        >
           <Popup>
-            <div className="font-mono text-xs">
-              <p className="text-sm font-semibold mb-1">{d.hazard_type}</p>
-              <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
-              <p>
-                {d.latitude!.toFixed(5)}, {d.longitude!.toFixed(5)}
-              </p>
-              <p>{new Date(d.created_at).toLocaleString()}</p>
+            <div
+              style={{
+                minWidth: "180px",
+              }}
+            >
+              <strong>
+                {detection.hazard_type}
+              </strong>
+
+              <br />
+
+              Confidence:{" "}
+              {(detection.confidence * 100).toFixed(1)}%
+
+              <br />
+
+              Latitude:{" "}
+              {Number(detection.latitude).toFixed(6)}
+
+              <br />
+
+              Longitude:{" "}
+              {Number(detection.longitude).toFixed(6)}
+
+              <br />
+
+              Detected:{" "}
+              {new Date(
+                detection.created_at
+              ).toLocaleString()}
             </div>
           </Popup>
         </Marker>
