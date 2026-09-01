@@ -18,26 +18,29 @@ import { supabase } from "@/lib/supabaseClient";
 import { Detection } from "@/types/detection";
 
 
+/*
+ * ============================================================
+ * ENVIRONMENT URLS
+ * ============================================================
+ */
+
 const STREAM_URL =
   process.env.NEXT_PUBLIC_PI_STREAM_URL;
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL;
+
+const LIVE_DETECTIONS_URL =
+  API_URL
+    ? `${API_URL.replace(/\/$/, "")}/api/live`
+    : undefined;
+
 
 /*
- * Automatically convert:
- *
- * http://10.143.80.51:8001/video_feed
- *
- * into:
- *
- * http://10.143.80.51:8001/detections
+ * ============================================================
+ * TYPES
+ * ============================================================
  */
-const DETECTIONS_URL = STREAM_URL
-  ? STREAM_URL.replace(
-      /\/video_feed\/?$/,
-      "/detections"
-    )
-  : undefined;
-
 
 type LiveDetection = {
   x1: number;
@@ -45,24 +48,27 @@ type LiveDetection = {
   x2: number;
   y2: number;
 
-  class_id: number;
+  class_id?: number;
   class_name: string;
-  confidence: number;
+  confidence?: number;
 };
 
 
 type LiveDetectionResponse = {
   timestamp?: number;
-  inference_time?: number;
 
-  gps_fix?: boolean;
-
-  latitude?: number | null;
-  longitude?: number | null;
+  frame_width?: number;
+  frame_height?: number;
 
   detections?: LiveDetection[];
 };
 
+
+/*
+ * ============================================================
+ * PAGE
+ * ============================================================
+ */
 
 export default function LiveMonitoringPage() {
 
@@ -108,11 +114,20 @@ export default function LiveMonitoringPage() {
     useRef<LiveDetection[]>([]);
 
 
+  const frameSizeRef =
+    useRef({
+      width: 640,
+      height: 480,
+    });
+
+
   /*
-   * ========================================================
+   * ============================================================
    * SUPABASE
-   * Current detection panel
-   * ========================================================
+   *
+   * This is ONLY for the right-side
+   * Current Detection panel.
+   * ============================================================
    */
 
   useEffect(() => {
@@ -155,8 +170,12 @@ export default function LiveMonitoringPage() {
             schema: "public",
             table: "detections",
           },
-         (payload) => {
-            setLatest(payload.new as Detection);
+          (payload) => {
+
+            setLatest(
+              payload.new as Detection
+            );
+
           }
         )
         .subscribe();
@@ -174,9 +193,9 @@ export default function LiveMonitoringPage() {
 
 
   /*
-   * ========================================================
-   * DRAW YOLO BOXES
-   * ========================================================
+   * ============================================================
+   * DRAW YOLO BOUNDING BOXES
+   * ============================================================
    */
 
   const drawDetections =
@@ -197,7 +216,9 @@ export default function LiveMonitoringPage() {
         !canvas ||
         !container
       ) {
+
         return;
+
       }
 
 
@@ -212,13 +233,16 @@ export default function LiveMonitoringPage() {
         containerWidth <= 0 ||
         containerHeight <= 0
       ) {
+
         return;
+
       }
 
 
       /*
-       * Canvas uses physical pixels.
+       * High-DPI canvas support
        */
+
       const dpr =
         window.devicePixelRatio || 1;
 
@@ -248,7 +272,9 @@ export default function LiveMonitoringPage() {
 
 
       if (!context) {
+
         return;
+
       }
 
 
@@ -271,37 +297,46 @@ export default function LiveMonitoringPage() {
 
 
       /*
-       * YOLO receives a 640 × 480
-       * frame from the Pi camera.
+       * ========================================================
+       * SOURCE FRAME SIZE
+       * ========================================================
        *
-       * But the <img> uses object-contain,
-       * which may create black bars.
-       *
-       * Calculate the actual displayed
-       * image position first.
+       * YOLO coordinates are based on the
+       * Raspberry Pi camera frame.
        */
 
       const sourceWidth =
-        image.naturalWidth || 640;
+        frameSizeRef.current.width ||
+        image.naturalWidth ||
+        640;
 
       const sourceHeight =
-        image.naturalHeight || 480;
+        frameSizeRef.current.height ||
+        image.naturalHeight ||
+        480;
 
 
       const sourceRatio =
         sourceWidth /
         sourceHeight;
 
+
       const containerRatio =
         containerWidth /
         containerHeight;
 
 
-      let displayWidth:
-        number;
+      /*
+       * Because the camera image uses:
+       *
+       * object-contain
+       *
+       * the actual visible image may not
+       * fill the entire container.
+       */
 
-      let displayHeight:
-        number;
+      let displayWidth = 0;
+      let displayHeight = 0;
 
       let offsetX = 0;
       let offsetY = 0;
@@ -319,6 +354,7 @@ export default function LiveMonitoringPage() {
           containerWidth /
           sourceRatio;
 
+
         offsetY =
           (
             containerHeight -
@@ -334,6 +370,7 @@ export default function LiveMonitoringPage() {
           containerHeight *
           sourceRatio;
 
+
         offsetX =
           (
             containerWidth -
@@ -347,10 +384,17 @@ export default function LiveMonitoringPage() {
         displayWidth /
         sourceWidth;
 
+
       const scaleY =
         displayHeight /
         sourceHeight;
 
+
+      /*
+       * ========================================================
+       * DRAW EACH DETECTION
+       * ========================================================
+       */
 
       for (
         const detection
@@ -360,12 +404,14 @@ export default function LiveMonitoringPage() {
         const x =
           offsetX +
           detection.x1 *
-            scaleX;
+          scaleX;
+
 
         const y =
           offsetY +
           detection.y1 *
-            scaleY;
+          scaleY;
+
 
         const width =
           (
@@ -373,6 +419,7 @@ export default function LiveMonitoringPage() {
             detection.x1
           ) *
           scaleX;
+
 
         const height =
           (
@@ -383,13 +430,14 @@ export default function LiveMonitoringPage() {
 
 
         /*
-         * Box
+         * Bounding box
          */
 
         context.lineWidth = 3;
 
         context.strokeStyle =
           "#22d3ee";
+
 
         context.strokeRect(
           x,
@@ -400,10 +448,12 @@ export default function LiveMonitoringPage() {
 
 
         /*
-         * Label
+         * ======================================================
+         * LABEL
          *
          * Class name ONLY.
          * No confidence percentage.
+         * ======================================================
          */
 
         const label =
@@ -428,14 +478,19 @@ export default function LiveMonitoringPage() {
           textWidth +
           paddingX * 2;
 
-        const labelHeight =
-          25;
+
+        const labelHeight = 25;
 
 
         let labelY =
           y -
           labelHeight;
 
+
+        /*
+         * If box is too close to top,
+         * put label inside the box.
+         */
 
         if (
           labelY < 0
@@ -477,17 +532,35 @@ export default function LiveMonitoringPage() {
 
 
   /*
-   * ========================================================
-   * POLL LIVE YOLO RESULTS FROM PI
-   * ========================================================
+   * ============================================================
+   * GET LIVE BOUNDING BOXES FROM RENDER
+   * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * Camera:
+   * Raspberry Pi directly
+   *
+   * Boxes:
+   * Render HTTPS /api/live
+   *
+   * This avoids HTTPS -> local HTTP
+   * browser fetch restrictions.
+   * ============================================================
    */
 
   useEffect(() => {
 
     if (
-      !DETECTIONS_URL
+      !LIVE_DETECTIONS_URL
     ) {
+
+      console.warn(
+        "NEXT_PUBLIC_API_URL is not configured."
+      );
+
       return;
+
     }
 
 
@@ -501,8 +574,9 @@ export default function LiveMonitoringPage() {
 
           const response =
             await fetch(
-              `${DETECTIONS_URL}?t=${Date.now()}`,
+              `${LIVE_DETECTIONS_URL}?t=${Date.now()}`,
               {
+                method: "GET",
                 cache: "no-store",
               }
             );
@@ -511,7 +585,14 @@ export default function LiveMonitoringPage() {
           if (
             !response.ok
           ) {
+
+            console.error(
+              "Live detection request failed:",
+              response.status
+            );
+
             return;
+
           }
 
 
@@ -522,26 +603,62 @@ export default function LiveMonitoringPage() {
 
 
           if (stopped) {
+
             return;
+
           }
 
+
+          /*
+           * Update frame dimensions
+           */
+
+          if (
+            data.frame_width &&
+            data.frame_height
+          ) {
+
+            frameSizeRef.current = {
+              width:
+                data.frame_width,
+
+              height:
+                data.frame_height,
+            };
+
+          }
+
+
+          /*
+           * Store newest boxes
+           */
 
           detectionsRef.current =
             data.detections ?? [];
 
 
+          /*
+           * Redraw immediately
+           */
+
           drawDetections();
 
-        } catch {
+        } catch (error) {
+
+          console.error(
+            "Unable to get live detections:",
+            error
+          );
+
 
           /*
-           * Do not kill camera stream
-           * when the detection endpoint
-           * temporarily fails.
+           * Clear old boxes if backend
+           * becomes unreachable.
            */
 
           detectionsRef.current =
             [];
+
 
           drawDetections();
 
@@ -551,9 +668,10 @@ export default function LiveMonitoringPage() {
 
 
     /*
-     * 300 ms fits the current
-     * ~0.35 s detector cycle better
-     * than polling extremely fast.
+     * Poll every 300ms.
+     *
+     * Good match for current Pi
+     * inference cycle.
      */
 
     const interval =
@@ -563,12 +681,17 @@ export default function LiveMonitoringPage() {
       );
 
 
+    /*
+     * Run immediately once.
+     */
+
     getDetections();
 
 
     return () => {
 
       stopped = true;
+
 
       window.clearInterval(
         interval
@@ -580,9 +703,9 @@ export default function LiveMonitoringPage() {
 
 
   /*
-   * ========================================================
-   * HANDLE WINDOW RESIZE
-   * ========================================================
+   * ============================================================
+   * REDRAW WHEN CONTAINER CHANGES SIZE
+   * ============================================================
    */
 
   useEffect(() => {
@@ -592,7 +715,9 @@ export default function LiveMonitoringPage() {
 
 
     if (!container) {
+
       return;
+
     }
 
 
@@ -621,15 +746,9 @@ export default function LiveMonitoringPage() {
 
 
   /*
-   * ========================================================
-   * STREAM TIMEOUT
-   *
-   * IMPORTANT:
-   * We no longer create another new Image().
-   *
-   * The actual MJPEG <img> itself determines
-   * whether the stream is alive.
-   * ========================================================
+   * ============================================================
+   * CAMERA CONNECTION TIMEOUT
+   * ============================================================
    */
 
   useEffect(() => {
@@ -640,9 +759,11 @@ export default function LiveMonitoringPage() {
         false
       );
 
+
       setStreamOk(
         false
       );
+
 
       return;
 
@@ -673,12 +794,19 @@ export default function LiveMonitoringPage() {
   }, []);
 
 
+  /*
+   * ============================================================
+   * CAMERA LOADED
+   * ============================================================
+   */
+
   const handleStreamLoaded =
     () => {
 
       setStreamOk(
         true
       );
+
 
       setCheckingStream(
         false
@@ -696,6 +824,12 @@ export default function LiveMonitoringPage() {
     };
 
 
+  /*
+   * ============================================================
+   * CAMERA ERROR
+   * ============================================================
+   */
+
   const handleStreamError =
     () => {
 
@@ -703,12 +837,15 @@ export default function LiveMonitoringPage() {
         false
       );
 
+
       setCheckingStream(
         false
       );
 
+
       detectionsRef.current =
         [];
+
 
       drawDetections();
 
@@ -718,6 +855,12 @@ export default function LiveMonitoringPage() {
   const isLive =
     streamOk;
 
+
+  /*
+   * ============================================================
+   * UI
+   * ============================================================
+   */
 
   return (
 
@@ -739,9 +882,9 @@ export default function LiveMonitoringPage() {
         "
       >
 
-        {/* =================================================
+        {/* =====================================================
             CAMERA
-        ================================================= */}
+        ===================================================== */}
 
         <div
           className="
@@ -768,6 +911,7 @@ export default function LiveMonitoringPage() {
                 ref={imageRef}
                 src={STREAM_URL}
                 alt="Road Hazard Detection Camera"
+
                 className="
                   absolute
                   inset-0
@@ -775,9 +919,11 @@ export default function LiveMonitoringPage() {
                   h-full
                   object-contain
                 "
+
                 onLoad={
                   handleStreamLoaded
                 }
+
                 onError={
                   handleStreamError
                 }
@@ -786,10 +932,13 @@ export default function LiveMonitoringPage() {
             )}
 
 
-            {/* YOLO bounding boxes */}
+            {/* =================================================
+                YOLO BOUNDING BOX CANVAS
+            ================================================= */}
 
             <canvas
               ref={canvasRef}
+
               className="
                 absolute
                 inset-0
@@ -801,7 +950,9 @@ export default function LiveMonitoringPage() {
             />
 
 
-            {/* Loading */}
+            {/* =================================================
+                CAMERA CONNECTING
+            ================================================= */}
 
             {checkingStream && (
 
@@ -829,6 +980,7 @@ export default function LiveMonitoringPage() {
                   "
                 />
 
+
                 <p
                   className="
                     text-text-primary
@@ -843,7 +995,9 @@ export default function LiveMonitoringPage() {
             )}
 
 
-            {/* Offline */}
+            {/* =================================================
+                CAMERA OFFLINE
+            ================================================= */}
 
             {!checkingStream &&
               !isLive && (
@@ -872,6 +1026,7 @@ export default function LiveMonitoringPage() {
                   "
                 />
 
+
                 <h3
                   className="
                     text-lg
@@ -881,6 +1036,7 @@ export default function LiveMonitoringPage() {
                 >
                   Camera Offline
                 </h3>
+
 
                 <p
                   className="
@@ -900,7 +1056,9 @@ export default function LiveMonitoringPage() {
             )}
 
 
-            {/* LIVE badge */}
+            {/* =================================================
+                LIVE BADGE
+            ================================================= */}
 
             <span
               className={`
@@ -961,9 +1119,9 @@ export default function LiveMonitoringPage() {
         </div>
 
 
-        {/* =================================================
+        {/* =====================================================
             CURRENT DETECTION PANEL
-        ================================================= */}
+        ===================================================== */}
 
         <div
           className="
@@ -997,6 +1155,8 @@ export default function LiveMonitoringPage() {
               "
             >
 
+              {/* Hazard Type */}
+
               <div>
 
                 <p
@@ -1007,6 +1167,7 @@ export default function LiveMonitoringPage() {
                 >
                   Hazard Type
                 </p>
+
 
                 <p
                   className="
@@ -1023,6 +1184,8 @@ export default function LiveMonitoringPage() {
               </div>
 
 
+              {/* Confidence */}
+
               <div>
 
                 <p
@@ -1033,6 +1196,7 @@ export default function LiveMonitoringPage() {
                 >
                   Confidence Score
                 </p>
+
 
                 <p
                   className="
@@ -1053,6 +1217,8 @@ export default function LiveMonitoringPage() {
               </div>
 
 
+              {/* Detection Time */}
+
               <div>
 
                 <p
@@ -1063,6 +1229,7 @@ export default function LiveMonitoringPage() {
                 >
                   Detection Time
                 </p>
+
 
                 <p
                   className="
@@ -1082,6 +1249,8 @@ export default function LiveMonitoringPage() {
               </div>
 
 
+              {/* GPS Coordinates */}
+
               <div>
 
                 <p
@@ -1092,6 +1261,7 @@ export default function LiveMonitoringPage() {
                 >
                   GPS Coordinates
                 </p>
+
 
                 <p
                   className="
@@ -1105,13 +1275,18 @@ export default function LiveMonitoringPage() {
                     latest.latitude
                       ?.toFixed(5)
                       ?? "—"
-                  },
+                  }
+
+                  ,
+
                   {" "}
+
                   {
                     latest.longitude
                       ?.toFixed(5)
                       ?? "—"
                   }
+
                 </p>
 
               </div>
@@ -1141,6 +1316,10 @@ export default function LiveMonitoringPage() {
           )}
 
 
+          {/* ===================================================
+              STATUS
+          =================================================== */}
+
           <div
             className="
               mt-6
@@ -1154,6 +1333,7 @@ export default function LiveMonitoringPage() {
               online={
                 !!latest
               }
+
               onlineLabel="Receiving detections"
               offlineLabel="Waiting for detections"
             />
