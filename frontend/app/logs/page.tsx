@@ -427,21 +427,7 @@ export default function DetectionLogsPage() {
                   </td>
 
 
-                  <td
-                    className="
-                      px-5
-                      py-3
-                      font-mono
-                      text-accent-glow
-                    "
-                  >
-                    {
-                      (
-                        log.confidence *
-                        100
-                      ).toFixed(1)
-                    }%
-                  </td>
+              
 
 
                   <td

@@ -1280,23 +1280,7 @@ export default function LiveMonitoringPage() {
              
 
 
-                <p
-                  className="
-                    font-mono
-                    text-lg
-                    text-accent-cyan
-                    mt-1
-                  "
-                >
-                  {
-                    (
-                      latest.confidence *
-                      100
-                    ).toFixed(
-                      1
-                    )
-                  }%
-                </p>
+              
 
               </div>
 
