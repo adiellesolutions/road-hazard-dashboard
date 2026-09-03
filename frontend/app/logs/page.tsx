@@ -45,36 +45,39 @@ export default function DetectionLogsPage() {
   const [
     logs,
     setLogs,
-  ] =
-    useState<Detection[]>([]);
+  ] = useState<Detection[]>([]);
 
 
   const [
     trials,
     setTrials,
-  ] =
-    useState<TestSession[]>([]);
+  ] = useState<TestSession[]>([]);
 
 
   const [
     hazardFilter,
     setHazardFilter,
-  ] =
-    useState("all");
+  ] = useState("all");
 
 
   const [
     trialFilter,
     setTrialFilter,
-  ] =
-    useState("all");
+  ] = useState("all");
 
 
   const [
     loading,
     setLoading,
-  ] =
-    useState(true);
+  ] = useState(true);
+
+
+  const [
+    selectedImage,
+    setSelectedImage,
+  ] = useState<string | null>(
+    null
+  );
 
 
   useEffect(() => {
@@ -93,7 +96,6 @@ export default function DetectionLogsPage() {
   useEffect(() => {
 
     setLoading(true);
-
 
     getDetections(
       1000,
@@ -182,7 +184,6 @@ export default function DetectionLogsPage() {
               All Hazard Types
             </option>
 
-
             {HAZARD_TYPES.map(
               (hazard) => (
 
@@ -229,7 +230,6 @@ export default function DetectionLogsPage() {
             <option value="all">
               All Trials
             </option>
-
 
             {trials.map(
               (trial) => (
@@ -310,6 +310,10 @@ export default function DetectionLogsPage() {
             >
 
               <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
+                Image
+              </th>
+
+              <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
                 Trial
               </th>
 
@@ -346,9 +350,7 @@ export default function DetectionLogsPage() {
               <tr>
 
                 <td
-                  colSpan={
-                    6
-                  }
+                  colSpan={6}
                   className="
                     text-center
                     text-text-muted
@@ -369,9 +371,7 @@ export default function DetectionLogsPage() {
               <tr>
 
                 <td
-                  colSpan={
-                    6
-                  }
+                  colSpan={6}
                   className="
                     text-center
                     text-text-muted
@@ -402,6 +402,74 @@ export default function DetectionLogsPage() {
                     className="
                       px-5
                       py-3
+                    "
+                  >
+
+                    {log.image_url ? (
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedImage(
+                            log.image_url
+                          )
+                        }
+                        className="
+                          block
+                          rounded-md
+                          overflow-hidden
+                          border
+                          border-base-border
+                          hover:border-accent-cyan
+                          transition-colors
+                        "
+                      >
+
+                        <img
+                          src={
+                            log.image_url
+                          }
+                          alt={
+                            `${log.hazard_type} detection`
+                          }
+                          className="
+                            w-20
+                            h-14
+                            object-cover
+                          "
+                        />
+
+                      </button>
+
+                    ) : (
+
+                      <div
+                        className="
+                          w-20
+                          h-14
+                          rounded-md
+                          border
+                          border-base-border
+                          flex
+                          items-center
+                          justify-center
+                          text-text-faint
+                          text-[10px]
+                          font-mono
+                        "
+                      >
+                        No image
+                      </div>
+
+                    )}
+
+                  </td>
+
+
+                  <td
+                    className="
+                      px-5
+                      py-3
                       font-mono
                       text-accent-cyan
                     "
@@ -425,9 +493,6 @@ export default function DetectionLogsPage() {
                       log.hazard_type
                     }
                   </td>
-
-
-              
 
 
                   <td
@@ -487,6 +552,83 @@ export default function DetectionLogsPage() {
         </table>
 
       </div>
+
+
+      {/* =====================================================
+          IMAGE PREVIEW MODAL
+      ====================================================== */}
+
+      {selectedImage && (
+
+        <div
+          className="
+            fixed
+            inset-0
+            z-[9999]
+            bg-black/80
+            flex
+            items-center
+            justify-center
+            p-4
+          "
+          onClick={() =>
+            setSelectedImage(
+              null
+            )
+          }
+        >
+
+          <div
+            className="
+              relative
+              max-w-5xl
+              w-full
+            "
+            onClick={
+              (event) =>
+                event.stopPropagation()
+            }
+          >
+
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedImage(
+                  null
+                )
+              }
+              className="
+                absolute
+                -top-10
+                right-0
+                text-white
+                text-sm
+                font-medium
+              "
+            >
+              Close ✕
+            </button>
+
+
+            <img
+              src={
+                selectedImage
+              }
+              alt="Road hazard detection"
+              className="
+                w-full
+                max-h-[85vh]
+                object-contain
+                rounded-lg
+                bg-black
+              "
+            />
+
+          </div>
+
+        </div>
+
+      )}
 
     </div>
 

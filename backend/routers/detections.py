@@ -1,7 +1,16 @@
 import csv
 import io
+import os
+import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import (
+    APIRouter,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 
 from database import supabase
@@ -13,6 +22,13 @@ router = APIRouter(
     tags=["detections"],
 )
 
+
+IMAGE_BUCKET = "hazard-images"
+
+
+# ============================================================
+# ACTIVE TRIAL
+# ============================================================
 
 def get_active_trial():
     result = (
@@ -31,18 +47,166 @@ def get_active_trial():
     return None
 
 
+# ============================================================
+# IMAGE UPLOAD
+# ============================================================
+
+@router.post("/upload-image")
+async def upload_detection_image(
+    file: UploadFile = File(...),
+):
+    if not file.content_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing image content type",
+        )
+
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only image files are allowed",
+        )
+
+    image_bytes = await file.read()
+
+    if not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Empty image file",
+        )
+
+    # 10 MB safety limit
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="Image is too large",
+        )
+
+    extension = os.path.splitext(
+        file.filename or ""
+    )[1].lower()
+
+    if extension not in {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+    }:
+        extension = ".jpg"
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    folder = now.strftime(
+        "%Y/%m/%d"
+    )
+
+    filename = (
+        f"{uuid.uuid4().hex}"
+        f"{extension}"
+    )
+
+    storage_path = (
+        f"{folder}/{filename}"
+    )
+
+    try:
+        supabase.storage.from_(
+            IMAGE_BUCKET
+        ).upload(
+            path=storage_path,
+            file=image_bytes,
+            file_options={
+                "content-type":
+                    file.content_type,
+                "upsert":
+                    "false",
+            },
+        )
+
+        public_url = (
+            supabase.storage
+            .from_(IMAGE_BUCKET)
+            .get_public_url(
+                storage_path
+            )
+        )
+
+        # Depending on supabase-py version,
+        # get_public_url may return string/object.
+        if isinstance(
+            public_url,
+            str,
+        ):
+            image_url = public_url
+
+        elif isinstance(
+            public_url,
+            dict,
+        ):
+            image_url = (
+                public_url.get(
+                    "publicUrl"
+                )
+                or public_url.get(
+                    "public_url"
+                )
+            )
+
+        else:
+            image_url = str(
+                public_url
+            )
+
+        if not image_url:
+            raise Exception(
+                "Could not obtain public image URL"
+            )
+
+        return {
+            "image_url":
+                image_url,
+            "storage_path":
+                storage_path,
+        }
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to upload image: "
+                f"{error}"
+            ),
+        )
+
+
+# ============================================================
+# CREATE DETECTION
+# ============================================================
+
 @router.post("")
 def create_detection(
     detection: DetectionCreate,
 ):
-    payload = detection.model_dump()
+    payload = (
+        detection.model_dump()
+    )
 
-    active_trial = get_active_trial()
+    active_trial = (
+        get_active_trial()
+    )
 
     if active_trial:
-        payload["trial_id"] = active_trial["id"]
+        payload[
+            "trial_id"
+        ] = active_trial[
+            "id"
+        ]
     else:
-        payload["trial_id"] = None
+        payload[
+            "trial_id"
+        ] = None
 
     result = (
         supabase
@@ -54,11 +218,17 @@ def create_detection(
     if not result.data:
         raise HTTPException(
             status_code=500,
-            detail="Failed to save detection",
+            detail=(
+                "Failed to save detection"
+            ),
         )
 
     return result.data[0]
 
+
+# ============================================================
+# LIST DETECTIONS
+# ============================================================
 
 @router.get("")
 def list_detections(
@@ -104,10 +274,16 @@ def list_detections(
             trial_id,
         )
 
-    result = query.execute()
+    result = (
+        query.execute()
+    )
 
     return result.data
 
+
+# ============================================================
+# CSV EXPORT
+# ============================================================
 
 @router.get("/export")
 def export_detections_csv(
@@ -142,7 +318,9 @@ def export_detections_csv(
 
     buffer = io.StringIO()
 
-    writer = csv.writer(buffer)
+    writer = csv.writer(
+        buffer
+    )
 
     writer.writerow(
         [
@@ -151,18 +329,23 @@ def export_detections_csv(
             "Confidence",
             "Latitude",
             "Longitude",
+            "Image URL",
             "Time",
         ]
     )
 
     for row in rows:
         session = (
-            row.get("test_sessions")
+            row.get(
+                "test_sessions"
+            )
             or {}
         )
 
-        trial_number = session.get(
-            "trial_number"
+        trial_number = (
+            session.get(
+                "trial_number"
+            )
         )
 
         writer.writerow(
@@ -189,6 +372,10 @@ def export_detections_csv(
                     "",
                 ),
                 row.get(
+                    "image_url",
+                    "",
+                ),
+                row.get(
                     "created_at",
                     "",
                 ),
@@ -200,7 +387,8 @@ def export_detections_csv(
     filename = (
         "detection_logs.csv"
         if not trial_id
-        else "trial_detection_logs.csv"
+        else
+        "trial_detection_logs.csv"
     )
 
     return StreamingResponse(
@@ -212,6 +400,9 @@ def export_detections_csv(
         media_type="text/csv",
         headers={
             "Content-Disposition":
-                f"attachment; filename={filename}"
+                (
+                    "attachment; "
+                    f"filename={filename}"
+                )
         },
     )
