@@ -14,6 +14,8 @@ import {
 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import TrialControl from "@/components/TrialControl";
+
 import { supabase } from "@/lib/supabaseClient";
 import { Detection } from "@/types/detection";
 
@@ -49,7 +51,9 @@ type LiveDetection = {
   y2: number;
 
   class_id?: number;
+
   class_name: string;
+
   confidence?: number;
 };
 
@@ -75,21 +79,24 @@ export default function LiveMonitoringPage() {
   const [
     latest,
     setLatest,
-  ] = useState<Detection | null>(
-    null
-  );
+  ] =
+    useState<Detection | null>(
+      null
+    );
 
 
   const [
     streamOk,
     setStreamOk,
-  ] = useState(false);
+  ] =
+    useState(false);
 
 
   const [
     checkingStream,
     setCheckingStream,
-  ] = useState(true);
+  ] =
+    useState(true);
 
 
   const imageRef =
@@ -111,7 +118,9 @@ export default function LiveMonitoringPage() {
 
 
   const detectionsRef =
-    useRef<LiveDetection[]>([]);
+    useRef<LiveDetection[]>(
+      []
+    );
 
 
   const frameSizeRef =
@@ -123,39 +132,75 @@ export default function LiveMonitoringPage() {
 
   /*
    * ============================================================
-   * SUPABASE
-   *
-   * This is ONLY for the right-side
-   * Current Detection panel.
+   * SUPABASE CURRENT DETECTION
    * ============================================================
    */
 
   useEffect(() => {
 
-    supabase
-      .from("detections")
-      .select("*")
-      .order(
-        "created_at",
-        {
-          ascending: false,
-        }
-      )
-      .limit(1)
-      .then(({ data }) => {
+    const loadLatestDetection =
+      async () => {
 
-        if (
-          data &&
-          data.length > 0
-        ) {
+        try {
 
-          setLatest(
-            data[0] as Detection
+          const {
+            data,
+            error,
+          } =
+            await supabase
+              .from(
+                "detections"
+              )
+              .select(
+                "*"
+              )
+              .order(
+                "created_at",
+                {
+                  ascending: false,
+                }
+              )
+              .limit(
+                1
+              );
+
+
+          if (error) {
+
+            console.error(
+              "Unable to load latest detection:",
+              error
+            );
+
+            return;
+
+          }
+
+
+          if (
+            data &&
+            data.length > 0
+          ) {
+
+            setLatest(
+              data[0] as Detection
+            );
+
+          }
+
+        } catch (error) {
+
+          console.error(
+            "Unable to load latest detection:",
+            error
           );
 
         }
 
-      });
+      };
+
+
+    loadLatestDetection();
 
 
     const channel =
@@ -166,11 +211,18 @@ export default function LiveMonitoringPage() {
         .on(
           "postgres_changes",
           {
-            event: "INSERT",
-            schema: "public",
-            table: "detections",
+            event:
+              "INSERT",
+
+            schema:
+              "public",
+
+            table:
+              "detections",
           },
-          (payload) => {
+          (
+            payload
+          ) => {
 
             setLatest(
               payload.new as Detection
@@ -199,353 +251,349 @@ export default function LiveMonitoringPage() {
    */
 
   const drawDetections =
-    useCallback(() => {
+    useCallback(
+      () => {
 
-      const image =
-        imageRef.current;
+        const image =
+          imageRef.current;
 
-      const canvas =
-        canvasRef.current;
 
-      const container =
-        containerRef.current;
+        const canvas =
+          canvasRef.current;
 
 
-      if (
-        !image ||
-        !canvas ||
-        !container
-      ) {
+        const container =
+          containerRef.current;
 
-        return;
-
-      }
-
-
-      const containerWidth =
-        container.clientWidth;
-
-      const containerHeight =
-        container.clientHeight;
-
-
-      if (
-        containerWidth <= 0 ||
-        containerHeight <= 0
-      ) {
-
-        return;
-
-      }
-
-
-      /*
-       * High-DPI canvas support
-       */
-
-      const dpr =
-        window.devicePixelRatio || 1;
-
-
-      canvas.width =
-        Math.round(
-          containerWidth * dpr
-        );
-
-      canvas.height =
-        Math.round(
-          containerHeight * dpr
-        );
-
-
-      canvas.style.width =
-        `${containerWidth}px`;
-
-      canvas.style.height =
-        `${containerHeight}px`;
-
-
-      const context =
-        canvas.getContext(
-          "2d"
-        );
-
-
-      if (!context) {
-
-        return;
-
-      }
-
-
-      context.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-      );
-
-
-      context.clearRect(
-        0,
-        0,
-        containerWidth,
-        containerHeight
-      );
-
-
-      /*
-       * ========================================================
-       * SOURCE FRAME SIZE
-       * ========================================================
-       *
-       * YOLO coordinates are based on the
-       * Raspberry Pi camera frame.
-       */
-
-      const sourceWidth =
-        frameSizeRef.current.width ||
-        image.naturalWidth ||
-        640;
-
-      const sourceHeight =
-        frameSizeRef.current.height ||
-        image.naturalHeight ||
-        480;
-
-
-      const sourceRatio =
-        sourceWidth /
-        sourceHeight;
-
-
-      const containerRatio =
-        containerWidth /
-        containerHeight;
-
-
-      /*
-       * Because the camera image uses:
-       *
-       * object-contain
-       *
-       * the actual visible image may not
-       * fill the entire container.
-       */
-
-      let displayWidth = 0;
-      let displayHeight = 0;
-
-      let offsetX = 0;
-      let offsetY = 0;
-
-
-      if (
-        sourceRatio >
-        containerRatio
-      ) {
-
-        displayWidth =
-          containerWidth;
-
-        displayHeight =
-          containerWidth /
-          sourceRatio;
-
-
-        offsetY =
-          (
-            containerHeight -
-            displayHeight
-          ) / 2;
-
-      } else {
-
-        displayHeight =
-          containerHeight;
-
-        displayWidth =
-          containerHeight *
-          sourceRatio;
-
-
-        offsetX =
-          (
-            containerWidth -
-            displayWidth
-          ) / 2;
-
-      }
-
-
-      const scaleX =
-        displayWidth /
-        sourceWidth;
-
-
-      const scaleY =
-        displayHeight /
-        sourceHeight;
-
-
-      /*
-       * ========================================================
-       * DRAW EACH DETECTION
-       * ========================================================
-       */
-
-      for (
-        const detection
-        of detectionsRef.current
-      ) {
-
-        const x =
-          offsetX +
-          detection.x1 *
-          scaleX;
-
-
-        const y =
-          offsetY +
-          detection.y1 *
-          scaleY;
-
-
-        const width =
-          (
-            detection.x2 -
-            detection.x1
-          ) *
-          scaleX;
-
-
-        const height =
-          (
-            detection.y2 -
-            detection.y1
-          ) *
-          scaleY;
-
-
-        /*
-         * Bounding box
-         */
-
-        context.lineWidth = 3;
-
-        context.strokeStyle =
-          "#22d3ee";
-
-
-        context.strokeRect(
-          x,
-          y,
-          width,
-          height
-        );
-
-
-        /*
-         * ======================================================
-         * LABEL
-         *
-         * Class name ONLY.
-         * No confidence percentage.
-         * ======================================================
-         */
-
-        const label =
-          detection.class_name;
-
-
-        context.font =
-          "600 14px monospace";
-
-
-        const paddingX = 7;
-        const paddingY = 5;
-
-
-        const textWidth =
-          context.measureText(
-            label
-          ).width;
-
-
-        const labelWidth =
-          textWidth +
-          paddingX * 2;
-
-
-        const labelHeight = 25;
-
-
-        let labelY =
-          y -
-          labelHeight;
-
-
-        /*
-         * If box is too close to top,
-         * put label inside the box.
-         */
 
         if (
-          labelY < 0
+          !image ||
+          !canvas ||
+          !container
         ) {
 
-          labelY = y;
+          return;
 
         }
 
 
-        context.fillStyle =
-          "rgba(8, 15, 30, 0.88)";
+        const containerWidth =
+          container.clientWidth;
 
 
-        context.fillRect(
-          x,
-          labelY,
-          labelWidth,
-          labelHeight
+        const containerHeight =
+          container.clientHeight;
+
+
+        if (
+          containerWidth <= 0 ||
+          containerHeight <= 0
+        ) {
+
+          return;
+
+        }
+
+
+        /*
+         * ======================================================
+         * HIGH-DPI CANVAS
+         * ======================================================
+         */
+
+        const dpr =
+          window.devicePixelRatio || 1;
+
+
+        canvas.width =
+          Math.round(
+            containerWidth * dpr
+          );
+
+
+        canvas.height =
+          Math.round(
+            containerHeight * dpr
+          );
+
+
+        canvas.style.width =
+          `${containerWidth}px`;
+
+
+        canvas.style.height =
+          `${containerHeight}px`;
+
+
+        const context =
+          canvas.getContext(
+            "2d"
+          );
+
+
+        if (!context) {
+
+          return;
+
+        }
+
+
+        context.setTransform(
+          dpr,
+          0,
+          0,
+          dpr,
+          0,
+          0
         );
 
 
-        context.fillStyle =
-          "#22d3ee";
-
-
-        context.fillText(
-          label,
-          x + paddingX,
-          labelY +
-            labelHeight -
-            paddingY -
-            2
+        context.clearRect(
+          0,
+          0,
+          containerWidth,
+          containerHeight
         );
 
-      }
 
-    }, []);
+        /*
+         * ======================================================
+         * SOURCE CAMERA FRAME SIZE
+         * ======================================================
+         */
+
+        const sourceWidth =
+          frameSizeRef.current.width ||
+          image.naturalWidth ||
+          640;
+
+
+        const sourceHeight =
+          frameSizeRef.current.height ||
+          image.naturalHeight ||
+          480;
+
+
+        const sourceRatio =
+          sourceWidth /
+          sourceHeight;
+
+
+        const containerRatio =
+          containerWidth /
+          containerHeight;
+
+
+        let displayWidth = 0;
+        let displayHeight = 0;
+
+        let offsetX = 0;
+        let offsetY = 0;
+
+
+        /*
+         * Image uses object-contain.
+         *
+         * Calculate the exact visible
+         * image area before scaling boxes.
+         */
+
+        if (
+          sourceRatio >
+          containerRatio
+        ) {
+
+          displayWidth =
+            containerWidth;
+
+
+          displayHeight =
+            containerWidth /
+            sourceRatio;
+
+
+          offsetY =
+            (
+              containerHeight -
+              displayHeight
+            ) / 2;
+
+        } else {
+
+          displayHeight =
+            containerHeight;
+
+
+          displayWidth =
+            containerHeight *
+            sourceRatio;
+
+
+          offsetX =
+            (
+              containerWidth -
+              displayWidth
+            ) / 2;
+
+        }
+
+
+        const scaleX =
+          displayWidth /
+          sourceWidth;
+
+
+        const scaleY =
+          displayHeight /
+          sourceHeight;
+
+
+        /*
+         * ======================================================
+         * DRAW EACH BOX
+         * ======================================================
+         */
+
+        for (
+          const detection
+          of detectionsRef.current
+        ) {
+
+          const x =
+            offsetX +
+            detection.x1 *
+            scaleX;
+
+
+          const y =
+            offsetY +
+            detection.y1 *
+            scaleY;
+
+
+          const width =
+            (
+              detection.x2 -
+              detection.x1
+            ) *
+            scaleX;
+
+
+          const height =
+            (
+              detection.y2 -
+              detection.y1
+            ) *
+            scaleY;
+
+
+          /*
+           * Bounding box
+           */
+
+          context.lineWidth =
+            3;
+
+
+          context.strokeStyle =
+            "#22d3ee";
+
+
+          context.strokeRect(
+            x,
+            y,
+            width,
+            height
+          );
+
+
+          /*
+           * Label
+           *
+           * Class name only.
+           */
+
+          const label =
+            detection.class_name;
+
+
+          context.font =
+            "600 14px monospace";
+
+
+          const paddingX =
+            7;
+
+
+          const paddingY =
+            5;
+
+
+          const textWidth =
+            context.measureText(
+              label
+            ).width;
+
+
+          const labelWidth =
+            textWidth +
+            paddingX * 2;
+
+
+          const labelHeight =
+            25;
+
+
+          let labelY =
+            y -
+            labelHeight;
+
+
+          if (
+            labelY < 0
+          ) {
+
+            labelY =
+              y;
+
+          }
+
+
+          context.fillStyle =
+            "rgba(8, 15, 30, 0.88)";
+
+
+          context.fillRect(
+            x,
+            labelY,
+            labelWidth,
+            labelHeight
+          );
+
+
+          context.fillStyle =
+            "#22d3ee";
+
+
+          context.fillText(
+            label,
+            x + paddingX,
+            labelY +
+              labelHeight -
+              paddingY -
+              2
+          );
+
+        }
+
+      },
+      []
+    );
 
 
   /*
    * ============================================================
-   * GET LIVE BOUNDING BOXES FROM RENDER
-   * ============================================================
-   *
-   * IMPORTANT:
-   *
-   * Camera:
-   * Raspberry Pi directly
-   *
-   * Boxes:
-   * Render HTTPS /api/live
-   *
-   * This avoids HTTPS -> local HTTP
-   * browser fetch restrictions.
+   * GET LIVE YOLO BOXES FROM RENDER
    * ============================================================
    */
 
@@ -564,10 +612,11 @@ export default function LiveMonitoringPage() {
     }
 
 
-    let stopped = false;
+    let stopped =
+      false;
 
 
-    const getDetections =
+    const getLiveDetections =
       async () => {
 
         try {
@@ -576,8 +625,11 @@ export default function LiveMonitoringPage() {
             await fetch(
               `${LIVE_DETECTIONS_URL}?t=${Date.now()}`,
               {
-                method: "GET",
-                cache: "no-store",
+                method:
+                  "GET",
+
+                cache:
+                  "no-store",
               }
             );
 
@@ -602,7 +654,9 @@ export default function LiveMonitoringPage() {
             ) as LiveDetectionResponse;
 
 
-          if (stopped) {
+          if (
+            stopped
+          ) {
 
             return;
 
@@ -610,7 +664,7 @@ export default function LiveMonitoringPage() {
 
 
           /*
-           * Update frame dimensions
+           * Update source frame dimensions.
            */
 
           if (
@@ -630,7 +684,7 @@ export default function LiveMonitoringPage() {
 
 
           /*
-           * Store newest boxes
+           * Store newest YOLO boxes.
            */
 
           detectionsRef.current =
@@ -638,7 +692,7 @@ export default function LiveMonitoringPage() {
 
 
           /*
-           * Redraw immediately
+           * Redraw boxes.
            */
 
           drawDetections();
@@ -652,8 +706,7 @@ export default function LiveMonitoringPage() {
 
 
           /*
-           * Clear old boxes if backend
-           * becomes unreachable.
+           * Clear stale boxes.
            */
 
           detectionsRef.current =
@@ -668,29 +721,28 @@ export default function LiveMonitoringPage() {
 
 
     /*
-     * Poll every 300ms.
-     *
-     * Good match for current Pi
-     * inference cycle.
+     * Current Pi inference speed is
+     * suited to ~300ms polling.
      */
 
     const interval =
       window.setInterval(
-        getDetections,
+        getLiveDetections,
         300
       );
 
 
     /*
-     * Run immediately once.
+     * Fetch immediately.
      */
 
-    getDetections();
+    getLiveDetections();
 
 
     return () => {
 
-      stopped = true;
+      stopped =
+        true;
 
 
       window.clearInterval(
@@ -699,12 +751,14 @@ export default function LiveMonitoringPage() {
 
     };
 
-  }, [drawDetections]);
+  }, [
+    drawDetections
+  ]);
 
 
   /*
    * ============================================================
-   * REDRAW WHEN CONTAINER CHANGES SIZE
+   * REDRAW BOXES WHEN DISPLAY RESIZES
    * ============================================================
    */
 
@@ -714,7 +768,9 @@ export default function LiveMonitoringPage() {
       containerRef.current;
 
 
-    if (!container) {
+    if (
+      !container
+    ) {
 
       return;
 
@@ -742,7 +798,9 @@ export default function LiveMonitoringPage() {
 
     };
 
-  }, [drawDetections]);
+  }, [
+    drawDetections
+  ]);
 
 
   /*
@@ -753,7 +811,9 @@ export default function LiveMonitoringPage() {
 
   useEffect(() => {
 
-    if (!STREAM_URL) {
+    if (
+      !STREAM_URL
+    ) {
 
       setCheckingStream(
         false
@@ -866,11 +926,22 @@ export default function LiveMonitoringPage() {
 
     <div>
 
+      {/* =======================================================
+          PAGE HEADER
+      ======================================================= */}
+
       <PageHeader
         eyebrow="Camera"
         title="Camera Monitoring"
         description="Real-time camera feed and road hazard detection powered by YOLOv8."
       />
+
+
+      {/* =======================================================
+          FIELD TEST TRIAL CONTROL
+      ======================================================= */}
+
+      <TrialControl />
 
 
       <div
@@ -883,7 +954,7 @@ export default function LiveMonitoringPage() {
       >
 
         {/* =====================================================
-            CAMERA
+            CAMERA AREA
         ===================================================== */}
 
         <div
@@ -893,7 +964,9 @@ export default function LiveMonitoringPage() {
         >
 
           <div
-            ref={containerRef}
+            ref={
+              containerRef
+            }
             className="
               bg-base-surface
               border
@@ -905,11 +978,21 @@ export default function LiveMonitoringPage() {
             "
           >
 
+            {/* =================================================
+                CAMERA IMAGE
+            ================================================= */}
+
             {STREAM_URL && (
 
               <img
-                ref={imageRef}
-                src={STREAM_URL}
+                ref={
+                  imageRef
+                }
+
+                src={
+                  STREAM_URL
+                }
+
                 alt="Road Hazard Detection Camera"
 
                 className="
@@ -937,7 +1020,9 @@ export default function LiveMonitoringPage() {
             ================================================= */}
 
             <canvas
-              ref={canvasRef}
+              ref={
+                canvasRef
+              }
 
               className="
                 absolute
@@ -1002,62 +1087,62 @@ export default function LiveMonitoringPage() {
             {!checkingStream &&
               !isLive && (
 
-              <div
-                className="
-                  absolute
-                  inset-0
-                  flex
-                  flex-col
-                  items-center
-                  justify-center
-                  text-center
-                  px-6
-                  bg-base-surface
-                  z-20
-                "
-              >
-
-                <CameraOff
+                <div
                   className="
-                    h-14
-                    w-14
-                    text-text-faint
-                    mb-4
-                  "
-                />
-
-
-                <h3
-                  className="
-                    text-lg
-                    font-semibold
-                    text-text-primary
+                    absolute
+                    inset-0
+                    flex
+                    flex-col
+                    items-center
+                    justify-center
+                    text-center
+                    px-6
+                    bg-base-surface
+                    z-20
                   "
                 >
-                  Camera Offline
-                </h3>
+
+                  <CameraOff
+                    className="
+                      h-14
+                      w-14
+                      text-text-faint
+                      mb-4
+                    "
+                  />
 
 
-                <p
-                  className="
-                    text-sm
-                    text-text-muted
-                    mt-2
-                    max-w-sm
-                  "
-                >
-                  No camera feed detected.
-                  Waiting for Raspberry Pi
-                  camera connection.
-                </p>
+                  <h3
+                    className="
+                      text-lg
+                      font-semibold
+                      text-text-primary
+                    "
+                  >
+                    Camera Offline
+                  </h3>
 
-              </div>
 
-            )}
+                  <p
+                    className="
+                      text-sm
+                      text-text-muted
+                      mt-2
+                      max-w-sm
+                    "
+                  >
+                    No camera feed detected.
+                    Waiting for Raspberry Pi
+                    camera connection.
+                  </p>
+
+                </div>
+
+              )}
 
 
             {/* =================================================
-                LIVE BADGE
+                LIVE STATUS BADGE
             ================================================= */}
 
             <span
@@ -1155,7 +1240,9 @@ export default function LiveMonitoringPage() {
               "
             >
 
-              {/* Hazard Type */}
+              {/* ===============================================
+                  HAZARD TYPE
+              =============================================== */}
 
               <div>
 
@@ -1184,7 +1271,9 @@ export default function LiveMonitoringPage() {
               </div>
 
 
-              {/* Confidence */}
+              {/* ===============================================
+                  CONFIDENCE
+              =============================================== */}
 
               <div>
 
@@ -1210,14 +1299,18 @@ export default function LiveMonitoringPage() {
                     (
                       latest.confidence *
                       100
-                    ).toFixed(1)
+                    ).toFixed(
+                      1
+                    )
                   }%
                 </p>
 
               </div>
 
 
-              {/* Detection Time */}
+              {/* ===============================================
+                  DETECTION TIME
+              =============================================== */}
 
               <div>
 
@@ -1249,7 +1342,9 @@ export default function LiveMonitoringPage() {
               </div>
 
 
-              {/* GPS Coordinates */}
+              {/* ===============================================
+                  GPS
+              =============================================== */}
 
               <div>
 
@@ -1273,8 +1368,10 @@ export default function LiveMonitoringPage() {
                 >
                   {
                     latest.latitude
-                      ?.toFixed(5)
-                      ?? "—"
+                      ?.toFixed(
+                        5
+                      )
+                    ?? "—"
                   }
 
                   ,
@@ -1283,10 +1380,46 @@ export default function LiveMonitoringPage() {
 
                   {
                     latest.longitude
-                      ?.toFixed(5)
-                      ?? "—"
+                      ?.toFixed(
+                        5
+                      )
+                    ?? "—"
                   }
 
+                </p>
+
+              </div>
+
+
+              {/* ===============================================
+                  TRIAL
+              =============================================== */}
+
+              <div>
+
+                <p
+                  className="
+                    text-xs
+                    text-text-faint
+                  "
+                >
+                  Field Test Trial
+                </p>
+
+
+                <p
+                  className="
+                    font-mono
+                    text-sm
+                    text-text-primary
+                    mt-1
+                  "
+                >
+                  {
+                    latest.test_sessions
+                      ? `Trial ${latest.test_sessions.trial_number}`
+                      : "Unassigned"
+                  }
                 </p>
 
               </div>
@@ -1317,7 +1450,7 @@ export default function LiveMonitoringPage() {
 
 
           {/* ===================================================
-              STATUS
+              DETECTION STATUS
           =================================================== */}
 
           <div
@@ -1335,6 +1468,7 @@ export default function LiveMonitoringPage() {
               }
 
               onlineLabel="Receiving detections"
+
               offlineLabel="Waiting for detections"
             />
 
