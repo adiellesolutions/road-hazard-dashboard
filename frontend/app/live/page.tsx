@@ -1277,14 +1277,7 @@ export default function LiveMonitoringPage() {
 
               <div>
 
-                <p
-                  className="
-                    text-xs
-                    text-text-faint
-                  "
-                >
-                  Confidence Score
-                </p>
+             
 
 
                 <p

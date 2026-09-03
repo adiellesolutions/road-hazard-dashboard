@@ -318,10 +318,6 @@ export default function DetectionLogsPage() {
               </th>
 
               <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
-                Confidence
-              </th>
-
-              <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
                 Latitude
               </th>
 

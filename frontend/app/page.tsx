@@ -89,9 +89,7 @@ export default function DashboardPage() {
                   {new Date(d.created_at).toLocaleString()}
                 </p>
               </div>
-              <span className="font-mono text-sm text-accent-glow">
-                {(d.confidence * 100).toFixed(1)}%
-              </span>
+             
             </div>
           ))}
         </div>
