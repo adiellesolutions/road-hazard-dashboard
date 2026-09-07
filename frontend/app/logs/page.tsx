@@ -464,20 +464,7 @@ export default function DetectionLogsPage() {
                   </td>
 
 
-                  <td
-                    className="
-                      px-5
-                      py-3
-                      font-mono
-                      text-accent-cyan
-                    "
-                  >
-                    {
-                      log.test_sessions
-                        ? `Trial ${log.test_sessions.trial_number}`
-                        : "Unassigned"
-                    }
-                  </td>
+                  
 
 
                   <td
