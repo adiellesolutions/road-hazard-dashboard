@@ -313,9 +313,7 @@ export default function DetectionLogsPage() {
                 Image
               </th>
 
-              <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
-                Trial
-              </th>
+             
 
               <th className="px-5 py-3 font-mono text-[11px] uppercase tracking-wider text-text-faint">
                 Hazard Type
