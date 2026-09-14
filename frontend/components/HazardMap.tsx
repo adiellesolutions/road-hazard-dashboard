@@ -10,6 +10,7 @@ import {
   Popup,
   TileLayer,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -21,6 +22,18 @@ import {
 
 interface HazardMapProps {
   detections: Detection[];
+
+  selectable?: boolean;
+
+  selectedPosition?: {
+    latitude: number;
+    longitude: number;
+  } | null;
+
+  onLocationSelect?: (
+    latitude: number,
+    longitude: number
+  ) => void;
 }
 
 
@@ -68,6 +81,89 @@ const hazardMarker =
       -12,
     ],
   });
+
+
+/* =========================================================
+   SELECTED LOCATION MARKER
+========================================================= */
+
+const selectedMarker =
+  L.divIcon({
+
+    className: "",
+
+    html: `
+      <div
+        style="
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #facc15;
+          border: 4px solid white;
+          box-shadow:
+            0 0 0 4px
+            rgba(
+              250,
+              204,
+              21,
+              0.35
+            );
+        "
+      ></div>
+    `,
+
+    iconSize: [
+      22,
+      22,
+    ],
+
+    iconAnchor: [
+      11,
+      11,
+    ],
+
+    popupAnchor: [
+      0,
+      -14,
+    ],
+  });
+
+
+/* =========================================================
+   MAP CLICK LOCATION PICKER
+========================================================= */
+
+function MapLocationPicker({
+  enabled,
+  onLocationSelect,
+}: {
+  enabled: boolean;
+  onLocationSelect?: (
+    latitude: number,
+    longitude: number
+  ) => void;
+}) {
+
+  useMapEvents({
+
+    click(event) {
+
+      if (!enabled) {
+        return;
+      }
+
+      onLocationSelect?.(
+        event.latlng.lat,
+        event.latlng.lng
+      );
+
+    },
+
+  });
+
+
+  return null;
+}
 
 
 /* =========================================================
@@ -255,6 +351,9 @@ function FitDetectionBounds({
 
 export default function HazardMap({
   detections,
+  selectable = false,
+  selectedPosition = null,
+  onLocationSelect,
 }: HazardMapProps) {
 
   const locatedDetections =
@@ -269,7 +368,14 @@ export default function HazardMap({
   const center:
     [number, number] =
 
-    locatedDetections.length > 0
+    selectedPosition
+
+      ? [
+          selectedPosition.latitude,
+          selectedPosition.longitude,
+        ]
+
+      : locatedDetections.length > 0
 
       ? [
           Number(
@@ -331,6 +437,11 @@ export default function HazardMap({
 
           minHeight:
             "400px",
+
+          cursor:
+            selectable
+              ? "crosshair"
+              : "grab",
         }}
       >
 
@@ -346,6 +457,16 @@ export default function HazardMap({
         <FitDetectionBounds
           detections={
             locatedDetections
+          }
+        />
+
+
+        <MapLocationPicker
+          enabled={
+            selectable
+          }
+          onLocationSelect={
+            onLocationSelect
           }
         />
 
@@ -383,10 +504,6 @@ export default function HazardMap({
                       "250px",
                   }}
                 >
-
-                  {/* ==============================
-                      DETECTION IMAGE
-                  =============================== */}
 
                   {detection.image_url && (
 
@@ -529,6 +646,63 @@ export default function HazardMap({
             </Marker>
 
           )
+        )}
+
+
+        {selectedPosition && (
+
+          <Marker
+            position={[
+              selectedPosition.latitude,
+              selectedPosition.longitude,
+            ]}
+            icon={
+              selectedMarker
+            }
+          >
+
+            <Popup>
+
+              <div
+                style={{
+                  fontSize:
+                    "12px",
+
+                  lineHeight:
+                    "1.6",
+                }}
+              >
+
+                <strong>
+                  Selected Location
+                </strong>
+
+                <br />
+
+                Latitude:{" "}
+
+                {
+                  selectedPosition
+                    .latitude
+                    .toFixed(6)
+                }
+
+                <br />
+
+                Longitude:{" "}
+
+                {
+                  selectedPosition
+                    .longitude
+                    .toFixed(6)
+                }
+
+              </div>
+
+            </Popup>
+
+          </Marker>
+
         )}
 
       </MapContainer>

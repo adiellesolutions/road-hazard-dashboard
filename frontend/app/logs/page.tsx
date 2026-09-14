@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 
+import dynamic from "next/dynamic";
+
 import PageHeader from "@/components/PageHeader";
 
 import {
@@ -20,6 +22,37 @@ import {
   HazardType,
   TestSession,
 } from "@/types/detection";
+
+
+const HazardMap =
+  dynamic(
+    () =>
+      import(
+        "@/components/HazardMap"
+      ),
+    {
+      ssr: false,
+
+      loading: () => (
+
+        <div
+          className="
+            min-h-[400px]
+            w-full
+            flex
+            items-center
+            justify-center
+            text-text-faint
+            font-mono
+            text-sm
+          "
+        >
+          Loading map…
+        </div>
+
+      ),
+    }
+  );
 
 
 /* =========================================================
@@ -237,6 +270,32 @@ export default function DetectionLogsPage() {
     useState(true);
 
 
+  const [
+    mapLogs,
+    setMapLogs,
+  ] =
+    useState<
+      EditableDetection[]
+    >([]);
+
+
+  const [
+    mapLoading,
+    setMapLoading,
+  ] =
+    useState(true);
+
+
+  const [
+    selectedMapLocation,
+    setSelectedMapLocation,
+  ] =
+    useState<{
+      latitude: number;
+      longitude: number;
+    } | null>(null);
+
+
   /* =======================================================
      IMAGE PREVIEW
   ======================================================= */
@@ -434,6 +493,58 @@ export default function DetectionLogsPage() {
 
 
   /* =======================================================
+     LOAD MAP DETECTIONS
+     Map follows the selected trial only.
+     Hazard filter does not hide map markers.
+  ======================================================= */
+
+  const loadMapLogs =
+    useCallback(
+      async () => {
+
+        setMapLoading(true);
+
+        try {
+
+          const data =
+            await getDetections(
+              1000,
+              trialFilter
+            );
+
+          setMapLogs(
+            data as EditableDetection[]
+          );
+
+        } catch (
+          error
+        ) {
+
+          console.error(
+            error
+          );
+
+          setMapLogs([]);
+
+        } finally {
+
+          setMapLoading(false);
+
+        }
+
+      },
+      [trialFilter]
+    );
+
+
+  useEffect(() => {
+
+    loadMapLogs();
+
+  }, [loadMapLogs]);
+
+
+  /* =======================================================
      MESSAGE AUTO CLEAR
   ======================================================= */
 
@@ -490,6 +601,20 @@ export default function DetectionLogsPage() {
 
       trialId:
         initialTrialId,
+
+      latitude:
+        selectedMapLocation
+          ? selectedMapLocation
+              .latitude
+              .toFixed(6)
+          : "",
+
+      longitude:
+        selectedMapLocation
+          ? selectedMapLocation
+              .longitude
+              .toFixed(6)
+          : "",
 
       createdAt:
         toDateTimeLocal(
@@ -910,7 +1035,10 @@ export default function DetectionLogsPage() {
 
       closeEditor();
 
-      await loadLogs();
+      await Promise.all([
+        loadLogs(),
+        loadMapLogs(),
+      ]);
 
 
     } catch (
@@ -990,7 +1118,10 @@ export default function DetectionLogsPage() {
         "Detection deleted."
       );
 
-      await loadLogs();
+      await Promise.all([
+        loadLogs(),
+        loadMapLogs(),
+      ]);
 
 
     } catch (
@@ -1240,10 +1371,17 @@ export default function DetectionLogsPage() {
               trialFilter
             }
             onChange={
-              (event) =>
+              (event) => {
+
                 setTrialFilter(
                   event.target.value
-                )
+                );
+
+                setSelectedMapLocation(
+                  null
+                );
+
+              }
             }
             className="
               bg-base-surface
@@ -1311,6 +1449,302 @@ export default function DetectionLogsPage() {
         >
           Export CSV
         </a>
+
+      </div>
+
+
+      {/* ===================================================
+          TEMPORARY LOCATION MAP EDITOR
+      ==================================================== */}
+
+      <div
+        className="
+          mb-5
+          bg-base-surface
+          border
+          border-base-border
+          rounded-lg
+          overflow-hidden
+        "
+      >
+
+        <div
+          className="
+            flex
+            flex-col
+            md:flex-row
+            md:items-center
+            justify-between
+            gap-3
+            px-4
+            py-3
+            border-b
+            border-base-border
+          "
+        >
+
+          <div>
+
+            <div
+              className="
+                font-mono
+                text-[10px]
+                uppercase
+                tracking-[0.18em]
+                text-yellow-400
+                mb-1
+              "
+            >
+              Temporary Location Editor
+            </div>
+
+            <p
+              className="
+                text-sm
+                text-text-primary
+              "
+            >
+              Click anywhere on the map to choose the GPS location for a new detection.
+            </p>
+
+            <p
+              className="
+                text-xs
+                text-text-faint
+                mt-1
+              "
+            >
+              Cyan dots are saved detections. The yellow dot is your selected location.
+            </p>
+
+          </div>
+
+
+          <div
+            className="
+              flex
+              items-center
+              gap-2
+              shrink-0
+            "
+          >
+
+            {mapLoading && (
+
+              <span
+                className="
+                  text-[11px]
+                  text-text-faint
+                  font-mono
+                "
+              >
+                Loading map data…
+              </span>
+
+            )}
+
+
+            {selectedMapLocation && (
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedMapLocation(
+                    null
+                  )
+                }
+                className="
+                  px-3
+                  py-2
+                  rounded-lg
+                  border
+                  border-base-border
+                  text-xs
+                  text-text-muted
+                  hover:text-white
+                "
+              >
+                Clear Location
+              </button>
+
+            )}
+
+          </div>
+
+        </div>
+
+
+        <div
+          className="
+            h-[430px]
+            w-full
+          "
+        >
+
+          <HazardMap
+            detections={
+              mapLogs
+            }
+            selectable={
+              true
+            }
+            selectedPosition={
+              selectedMapLocation
+            }
+            onLocationSelect={(
+              latitude,
+              longitude
+            ) => {
+
+              setSelectedMapLocation({
+                latitude,
+                longitude,
+              });
+
+            }}
+          />
+
+        </div>
+
+
+        <div
+          className="
+            px-4
+            py-3
+            border-t
+            border-base-border
+            flex
+            flex-col
+            lg:flex-row
+            lg:items-center
+            lg:justify-between
+            gap-3
+          "
+        >
+
+          {selectedMapLocation ? (
+
+            <div
+              className="
+                flex
+                flex-wrap
+                gap-x-6
+                gap-y-2
+                font-mono
+                text-xs
+              "
+            >
+
+              <div>
+
+                <span
+                  className="
+                    text-text-faint
+                  "
+                >
+                  LATITUDE
+                </span>
+
+                <div
+                  className="
+                    text-yellow-300
+                    mt-1
+                  "
+                >
+                  {
+                    selectedMapLocation
+                      .latitude
+                      .toFixed(6)
+                  }
+                </div>
+
+              </div>
+
+
+              <div>
+
+                <span
+                  className="
+                    text-text-faint
+                  "
+                >
+                  LONGITUDE
+                </span>
+
+                <div
+                  className="
+                    text-yellow-300
+                    mt-1
+                  "
+                >
+                  {
+                    selectedMapLocation
+                      .longitude
+                      .toFixed(6)
+                  }
+                </div>
+
+              </div>
+
+            </div>
+
+          ) : (
+
+            <div
+              className="
+                text-xs
+                text-text-faint
+              "
+            >
+              No new location selected. Click the map to choose one.
+            </div>
+
+          )}
+
+
+          <button
+            type="button"
+            disabled={
+              !selectedMapLocation ||
+              trialFilter === "all"
+            }
+            onClick={
+              openAddModal
+            }
+            className="
+              px-4
+              py-2
+              rounded-lg
+              bg-accent
+              hover:bg-accent-dim
+              text-white
+              text-sm
+              font-medium
+              disabled:opacity-40
+              disabled:cursor-not-allowed
+              shrink-0
+            "
+          >
+            + Add Detection Here
+          </button>
+
+        </div>
+
+
+        {trialFilter === "all" && (
+
+          <div
+            className="
+              px-4
+              pb-3
+              text-[11px]
+              text-yellow-400
+            "
+          >
+            Select a specific trial first before using “Add Detection Here”.
+          </div>
+
+        )}
 
       </div>
 
