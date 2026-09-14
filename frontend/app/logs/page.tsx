@@ -166,7 +166,7 @@ function toDateTimeLocal(
 
   return localDate
     .toISOString()
-    .slice(0, 16);
+    .slice(0, 19);
 }
 
 
@@ -354,6 +354,15 @@ export default function DetectionLogsPage() {
   ] =
     useState<
       string | null
+    >(null);
+
+
+  const [
+    originalEditingRecord,
+    setOriginalEditingRecord,
+  ] =
+    useState<
+      EditableDetection | null
     >(null);
 
 
@@ -662,6 +671,7 @@ export default function DetectionLogsPage() {
 
     setEditorMode("add");
     setEditingId(null);
+    setOriginalEditingRecord(null);
     setImageFile(null);
 
     let initialTrialId = "";
@@ -716,6 +726,10 @@ export default function DetectionLogsPage() {
 
     setEditingId(
       log.id
+    );
+
+    setOriginalEditingRecord(
+      log
     );
 
     setImageFile(null);
@@ -777,6 +791,8 @@ export default function DetectionLogsPage() {
     setEditorOpen(false);
 
     setEditingId(null);
+
+    setOriginalEditingRecord(null);
 
     setImageFile(null);
 
@@ -963,52 +979,65 @@ export default function DetectionLogsPage() {
       }
 
 
-      /* -----------------------------------------------
-         Construct payload
-      ------------------------------------------------ */
+      const nextConfidence =
+        parseNullableNumber(
+          form.confidence
+        );
 
-      const payload = {
+      const nextLatitude =
+        parseNullableNumber(
+          form.latitude
+        );
 
-        hazard_type:
-          form.hazardType,
+      const nextLongitude =
+        parseNullableNumber(
+          form.longitude
+        );
 
-        confidence:
-          parseNullableNumber(
-            form.confidence
-          ),
+      const nextImageUrl =
+        finalImageUrl ||
+        null;
 
-        latitude:
-          parseNullableNumber(
-            form.latitude
-          ),
-
-        longitude:
-          parseNullableNumber(
-            form.longitude
-          ),
-
-        image_url:
-          finalImageUrl ||
-          null,
-
-        created_at:
-          new Date(
-            form.createdAt
-          ).toISOString(),
-
-        trial_id:
-          form.trialId,
-      };
+      const nextCreatedAt =
+        new Date(
+          form.createdAt
+        ).toISOString();
 
 
       /* -----------------------------------------------
          ADD
+         New records still save all fields.
       ------------------------------------------------ */
 
       if (
         editorMode ===
         "add"
       ) {
+
+        const payload = {
+
+          hazard_type:
+            form.hazardType,
+
+          confidence:
+            nextConfidence,
+
+          latitude:
+            nextLatitude,
+
+          longitude:
+            nextLongitude,
+
+          image_url:
+            nextImageUrl,
+
+          created_at:
+            nextCreatedAt,
+
+          trial_id:
+            form.trialId,
+        };
+
 
         const response =
           await fetch(
@@ -1053,6 +1082,11 @@ export default function DetectionLogsPage() {
 
       /* -----------------------------------------------
          EDIT
+         Only fields that were actually changed are sent.
+         Example:
+         - Replace image only -> only image_url is patched.
+         - Change time only -> only created_at is patched.
+         - Untouched values remain exactly as stored.
       ------------------------------------------------ */
 
       else {
@@ -1067,50 +1101,193 @@ export default function DetectionLogsPage() {
         }
 
 
-        const response =
-          await fetch(
-            `${SUPABASE_URL}` +
-            `/rest/v1/detections` +
-            `?id=eq.${editingId}`,
-            {
-              method:
-                "PATCH",
-
-              headers: {
-                ...getSupabaseHeaders(),
-
-                Prefer:
-                  "return=representation",
-              },
-
-              body:
-                JSON.stringify(
-                  payload
-                ),
-            }
-          );
-
-
         if (
-          !response.ok
+          !originalEditingRecord
         ) {
 
-          const text =
-            await response.text();
-
           throw new Error(
-            text
+            "Original detection data is unavailable. Please reopen the record and try again."
           );
         }
 
 
-        setMessage(
-          "Detection updated successfully."
-        );
+        const patchPayload:
+          Record<
+            string,
+            string | number | null
+          > = {};
+
+
+        if (
+          form.hazardType !==
+          originalEditingRecord.hazard_type
+        ) {
+
+          patchPayload.hazard_type =
+            form.hazardType;
+        }
+
+
+        const originalConfidence =
+          originalEditingRecord.confidence ??
+          null;
+
+        if (
+          nextConfidence !==
+          originalConfidence
+        ) {
+
+          patchPayload.confidence =
+            nextConfidence;
+        }
+
+
+        const originalLatitude =
+          originalEditingRecord.latitude ??
+          null;
+
+        if (
+          nextLatitude !==
+          originalLatitude
+        ) {
+
+          patchPayload.latitude =
+            nextLatitude;
+        }
+
+
+        const originalLongitude =
+          originalEditingRecord.longitude ??
+          null;
+
+        if (
+          nextLongitude !==
+          originalLongitude
+        ) {
+
+          patchPayload.longitude =
+            nextLongitude;
+        }
+
+
+        const originalImageUrl =
+          originalEditingRecord.image_url ??
+          null;
+
+        if (
+          nextImageUrl !==
+          originalImageUrl
+        ) {
+
+          patchPayload.image_url =
+            nextImageUrl;
+        }
+
+
+        const originalCreatedAtTime =
+          new Date(
+            originalEditingRecord.created_at
+          ).getTime();
+
+        const nextCreatedAtTime =
+          new Date(
+            nextCreatedAt
+          ).getTime();
+
+        if (
+          originalCreatedAtTime !==
+          nextCreatedAtTime
+        ) {
+
+          patchPayload.created_at =
+            nextCreatedAt;
+        }
+
+
+        const originalTrialId =
+          originalEditingRecord.trial_id ??
+          null;
+
+        if (
+          form.trialId !==
+          originalTrialId
+        ) {
+
+          patchPayload.trial_id =
+            form.trialId;
+        }
+
+
+        if (
+          Object.keys(
+            patchPayload
+          ).length === 0
+        ) {
+
+          setMessage(
+            "No changes to save."
+          );
+
+        } else {
+
+          const response =
+            await fetch(
+              `${SUPABASE_URL}` +
+              `/rest/v1/detections` +
+              `?id=eq.${editingId}`,
+              {
+                method:
+                  "PATCH",
+
+                headers: {
+                  ...getSupabaseHeaders(),
+
+                  Prefer:
+                    "return=representation",
+                },
+
+                body:
+                  JSON.stringify(
+                    patchPayload
+                  ),
+              }
+            );
+
+
+          if (
+            !response.ok
+          ) {
+
+            const text =
+              await response.text();
+
+            throw new Error(
+              text
+            );
+          }
+
+
+          setMessage(
+            "Detection updated successfully."
+          );
+        }
       }
 
 
-      closeEditor();
+      /*
+       * Close the editor directly after a successful save.
+       * We do not call closeEditor() here because saving is
+       * still true until the finally block runs.
+       */
+
+      setEditorOpen(false);
+      setEditingId(null);
+      setOriginalEditingRecord(null);
+      setImageFile(null);
+      setForm(
+        EMPTY_FORM
+      );
+
 
       await Promise.all([
         loadLogs(),
@@ -2635,6 +2812,7 @@ export default function DetectionLogsPage() {
 
                 <input
                   type="datetime-local"
+                  step="1"
                   value={
                     form.createdAt
                   }
