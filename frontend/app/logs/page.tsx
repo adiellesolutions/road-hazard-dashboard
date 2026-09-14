@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -296,6 +297,24 @@ export default function DetectionLogsPage() {
     } | null>(null);
 
 
+  const [
+    focusedDetectionId,
+    setFocusedDetectionId,
+  ] =
+    useState<string | null>(null);
+
+
+  const [
+    focusRequestKey,
+    setFocusRequestKey,
+  ] =
+    useState(0);
+
+
+  const mapSectionRef =
+    useRef<HTMLDivElement | null>(null);
+
+
   /* =======================================================
      IMAGE PREVIEW
   ======================================================= */
@@ -544,6 +563,19 @@ export default function DetectionLogsPage() {
   }, [loadMapLogs]);
 
 
+  useEffect(() => {
+
+    setFocusedDetectionId(
+      null
+    );
+
+    setSelectedMapLocation(
+      null
+    );
+
+  }, [trialFilter]);
+
+
   /* =======================================================
      MESSAGE AUTO CLEAR
   ======================================================= */
@@ -575,6 +607,51 @@ export default function DetectionLogsPage() {
     message,
     errorMessage,
   ]);
+
+
+  /* =======================================================
+     FOCUS DETECTION ON MAP
+  ======================================================= */
+
+  function focusDetectionOnMap(
+    log: EditableDetection
+  ) {
+
+    if (
+      log.latitude == null ||
+      log.longitude == null
+    ) {
+
+      setErrorMessage(
+        "This detection has no GPS coordinates, so it cannot be shown on the map."
+      );
+
+      return;
+    }
+
+
+    setFocusedDetectionId(
+      log.id
+    );
+
+    setFocusRequestKey(
+      (current) =>
+        current + 1
+    );
+
+
+    window.setTimeout(
+      () => {
+
+        mapSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+
+      },
+      50
+    );
+  }
 
 
   /* =======================================================
@@ -1458,6 +1535,9 @@ export default function DetectionLogsPage() {
       ==================================================== */}
 
       <div
+        ref={
+          mapSectionRef
+        }
         className="
           mb-5
           bg-base-surface
@@ -1590,6 +1670,12 @@ export default function DetectionLogsPage() {
             }
             selectedPosition={
               selectedMapLocation
+            }
+            focusDetectionId={
+              focusedDetectionId
+            }
+            focusRequestKey={
+              focusRequestKey
             }
             onLocationSelect={(
               latitude,
@@ -1870,9 +1956,31 @@ export default function DetectionLogsPage() {
                   key={
                     log.id
                   }
-                  className="
-                    hover:bg-base-surface2
-                  "
+                  onClick={() =>
+                    focusDetectionOnMap(
+                      log
+                    )
+                  }
+                  title={
+                    log.latitude != null &&
+                    log.longitude != null
+                      ? "Click to show this detection on the map"
+                      : "No GPS coordinates available"
+                  }
+                  className={`
+                    transition-colors
+                    ${
+                      log.latitude != null &&
+                      log.longitude != null
+                        ? "cursor-pointer hover:bg-base-surface2"
+                        : "cursor-default hover:bg-base-surface2"
+                    }
+                    ${
+                      focusedDetectionId === log.id
+                        ? "bg-accent/10"
+                        : ""
+                    }
+                  `}
                 >
 
                   {/* IMAGE */}
@@ -1888,11 +1996,13 @@ export default function DetectionLogsPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
+
                           setSelectedImage(
                             log.image_url
-                          )
-                        }
+                          );
+                        }}
                         className="
                           block
                           rounded-md
@@ -2034,11 +2144,13 @@ export default function DetectionLogsPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
+
                           openEditModal(
                             log
-                          )
-                        }
+                          );
+                        }}
                         className="
                           px-3
                           py-1.5
@@ -2058,11 +2170,13 @@ export default function DetectionLogsPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
+
                           setDeleteTarget(
                             log
-                          )
-                        }
+                          );
+                        }}
                         className="
                           px-3
                           py-1.5

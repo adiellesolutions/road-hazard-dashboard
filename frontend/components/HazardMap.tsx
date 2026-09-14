@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
 } from "react";
 
 import {
@@ -34,6 +35,10 @@ interface HazardMapProps {
     latitude: number,
     longitude: number
   ) => void;
+
+  focusDetectionId?: string | null;
+
+  focusRequestKey?: number;
 }
 
 
@@ -346,6 +351,228 @@ function FitDetectionBounds({
 
 
 /* =========================================================
+   DETECTION MARKER
+   Can be focused from the Detection Logs table.
+========================================================= */
+
+function DetectionMarker({
+  detection,
+  focused,
+  focusRequestKey,
+}: {
+  detection: Detection;
+  focused: boolean;
+  focusRequestKey: number;
+}) {
+
+  const map =
+    useMap();
+
+  const markerRef =
+    useRef<L.Marker | null>(
+      null
+    );
+
+  const latitude =
+    Number(
+      detection.latitude
+    );
+
+  const longitude =
+    Number(
+      detection.longitude
+    );
+
+  useEffect(() => {
+
+    if (!focused) {
+      return;
+    }
+
+    map.flyTo(
+      [
+        latitude,
+        longitude,
+      ],
+      Math.max(
+        map.getZoom(),
+        17
+      ),
+      {
+        duration: 0.6,
+      }
+    );
+
+    const timer =
+      window.setTimeout(
+        () => {
+          markerRef.current?.openPopup();
+        },
+        450
+      );
+
+    return () =>
+      window.clearTimeout(
+        timer
+      );
+
+  }, [
+    focused,
+    focusRequestKey,
+    latitude,
+    longitude,
+    map,
+  ]);
+
+  return (
+
+    <Marker
+      ref={
+        markerRef
+      }
+      position={[
+        latitude,
+        longitude,
+      ]}
+      icon={
+        hazardMarker
+      }
+    >
+
+      <Popup
+        maxWidth={
+          320
+        }
+      >
+
+        <div
+          style={{
+            width:
+              "250px",
+          }}
+        >
+
+          {detection.image_url && (
+
+            <a
+              href={
+                detection.image_url
+              }
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display:
+                  "block",
+                marginBottom:
+                  "10px",
+              }}
+            >
+
+              <img
+                src={
+                  detection.image_url
+                }
+                alt={
+                  detection.hazard_type
+                }
+                style={{
+                  display:
+                    "block",
+                  width:
+                    "100%",
+                  height:
+                    "140px",
+                  objectFit:
+                    "cover",
+                  borderRadius:
+                    "6px",
+                }}
+              />
+
+            </a>
+
+          )}
+
+          <strong
+            style={{
+              fontSize:
+                "14px",
+            }}
+          >
+            {
+              detection.hazard_type
+            }
+          </strong>
+
+          <div
+            style={{
+              marginTop:
+                "6px",
+              fontSize:
+                "12px",
+              lineHeight:
+                "1.6",
+            }}
+          >
+
+            {detection.test_sessions && (
+
+              <>
+                Trial:{" "}
+                <strong>
+                  {
+                    detection
+                      .test_sessions
+                      .trial_number
+                  }
+                </strong>
+                <br />
+              </>
+
+            )}
+
+            {detection.confidence != null && (
+
+              <>
+                Confidence:{" "}
+                {
+                  (
+                    detection.confidence *
+                    100
+                  ).toFixed(1)
+                }
+                %
+                <br />
+              </>
+
+            )}
+
+            Latitude:{" "}
+            {latitude.toFixed(6)}
+            <br />
+
+            Longitude:{" "}
+            {longitude.toFixed(6)}
+            <br />
+
+            Detected:{" "}
+            {new Date(
+              detection.created_at
+            ).toLocaleString()}
+
+          </div>
+
+        </div>
+
+      </Popup>
+
+    </Marker>
+
+  );
+}
+
+
+/* =========================================================
    MAIN MAP
 ========================================================= */
 
@@ -354,6 +581,8 @@ export default function HazardMap({
   selectable = false,
   selectedPosition = null,
   onLocationSelect,
+  focusDetectionId = null,
+  focusRequestKey = 0,
 }: HazardMapProps) {
 
   const locatedDetections =
@@ -474,176 +703,21 @@ export default function HazardMap({
         {locatedDetections.map(
           (detection) => (
 
-            <Marker
+            <DetectionMarker
               key={
                 detection.id
               }
-              position={[
-                Number(
-                  detection.latitude
-                ),
-
-                Number(
-                  detection.longitude
-                ),
-              ]}
-              icon={
-                hazardMarker
+              detection={
+                detection
               }
-            >
-
-              <Popup
-                maxWidth={
-                  320
-                }
-              >
-
-                <div
-                  style={{
-                    width:
-                      "250px",
-                  }}
-                >
-
-                  {detection.image_url && (
-
-                    <a
-                      href={
-                        detection.image_url
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display:
-                          "block",
-
-                        marginBottom:
-                          "10px",
-                      }}
-                    >
-
-                      <img
-                        src={
-                          detection.image_url
-                        }
-                        alt={
-                          detection.hazard_type
-                        }
-                        style={{
-                          display:
-                            "block",
-
-                          width:
-                            "100%",
-
-                          height:
-                            "140px",
-
-                          objectFit:
-                            "cover",
-
-                          borderRadius:
-                            "6px",
-                        }}
-                      />
-
-                    </a>
-
-                  )}
-
-
-                  <strong
-                    style={{
-                      fontSize:
-                        "14px",
-                    }}
-                  >
-                    {
-                      detection.hazard_type
-                    }
-                  </strong>
-
-
-                  <div
-                    style={{
-                      marginTop:
-                        "6px",
-
-                      fontSize:
-                        "12px",
-
-                      lineHeight:
-                        "1.6",
-                    }}
-                  >
-
-                    {detection.test_sessions && (
-
-                      <>
-
-                        Trial:{" "}
-
-                        <strong>
-
-                          {
-                            detection
-                              .test_sessions
-                              .trial_number
-                          }
-
-                        </strong>
-
-                        <br />
-
-                      </>
-
-                    )}
-
-
-                    Confidence:{" "}
-
-                    {(
-                      detection.confidence
-                      *
-                      100
-                    ).toFixed(1)}
-
-                    %
-
-                    <br />
-
-
-                    Latitude:{" "}
-
-                    {Number(
-                      detection.latitude
-                    ).toFixed(6)}
-
-                    <br />
-
-
-                    Longitude:{" "}
-
-                    {Number(
-                      detection.longitude
-                    ).toFixed(6)}
-
-                    <br />
-
-
-                    Detected:{" "}
-
-                    {new Date(
-                      detection.created_at
-                    ).toLocaleString()}
-
-                  </div>
-
-                </div>
-
-              </Popup>
-
-            </Marker>
+              focused={
+                focusDetectionId ===
+                detection.id
+              }
+              focusRequestKey={
+                focusRequestKey
+              }
+            />
 
           )
         )}
