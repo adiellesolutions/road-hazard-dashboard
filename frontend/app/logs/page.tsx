@@ -175,36 +175,7 @@ export default function DetectionLogsPage() {
         </a>
       </div>
 
-      {/* READ-ONLY MAP */}
-      <div
-        ref={mapSectionRef}
-        className="mb-5 bg-base-surface border border-base-border rounded-lg overflow-hidden"
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-border">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent-cyan mb-1">
-              Detection Map
-            </div>
-            <p className="text-sm text-text-primary">
-              Recorded GPS locations for the selected trial.
-            </p>
-          </div>
 
-          {mapLoading && (
-            <span className="text-[11px] text-text-faint font-mono">
-              Loading map data…
-            </span>
-          )}
-        </div>
-
-        <div className="h-[430px] w-full">
-          <HazardMap
-            detections={mapLogs}
-            focusDetectionId={focusedDetectionId}
-            focusRequestKey={focusRequestKey}
-          />
-        </div>
-      </div>
 
       {/* LOG TABLE */}
       <div className="bg-base-surface border border-base-border rounded-lg overflow-x-auto">
